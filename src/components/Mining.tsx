@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mining as MiningType } from '../types/game';
-import { Gem, Sparkles, X, AlertTriangle } from 'lucide-react';
+import { Gem, Sparkles, X } from 'lucide-react';
 
 interface MiningProps {
   mining: MiningType;
@@ -19,15 +19,6 @@ export const Mining: React.FC<MiningProps> = ({
 }) => {
   const [gemNode, setGemNode] = useState<{ isShiny: boolean } | null>(null);
   const [showShop, setShowShop] = useState(false);
-  const [lastMineTime, setLastMineTime] = useState(0);
-  const [clickCount, setClickCount] = useState(0);
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
-
-  const MINE_COOLDOWN = 1000; // 1 second cooldown between mines
-  const MAX_CLICKS_PER_WINDOW = 5; // Max 5 clicks per 10 seconds
-  const CLICK_WINDOW = 10000; // 10 second window
-  const BLOCK_DURATION = 30000; // 30 second block
 
   // Generate new gem node when component mounts or after mining
   useEffect(() => {
@@ -37,58 +28,8 @@ export const Mining: React.FC<MiningProps> = ({
     }
   }, [gemNode]);
 
-  // Reset click count every 10 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setClickCount(0);
-    }, CLICK_WINDOW);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Handle block timer
-  useEffect(() => {
-    if (isBlocked && blockTimeRemaining > 0) {
-      const timer = setTimeout(() => {
-        setBlockTimeRemaining(prev => {
-          if (prev <= 1000) {
-            setIsBlocked(false);
-            setClickCount(0);
-            return 0;
-          }
-          return prev - 1000;
-        });
-      }, 1000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isBlocked, blockTimeRemaining]);
-
   const handleCellClick = () => {
-    const now = Date.now();
-    
-    // Check if blocked
-    if (isBlocked) {
-      return;
-    }
-
-    // Check cooldown
-    if (now - lastMineTime < MINE_COOLDOWN || !gemNode) {
-      return;
-    }
-
-    // Anti-auto-clicker: Track clicks
-    const newClickCount = clickCount + 1;
-    setClickCount(newClickCount);
-
-    // If too many clicks in the window, block the user
-    if (newClickCount > MAX_CLICKS_PER_WINDOW) {
-      setIsBlocked(true);
-      setBlockTimeRemaining(BLOCK_DURATION);
-      return;
-    }
-
-    setLastMineTime(now);
+    if (!gemNode) return;
 
     // Mine the gem
     const result = onMineGem(0, 0);
@@ -132,37 +73,6 @@ export const Mining: React.FC<MiningProps> = ({
         </div>
       </div>
 
-      {/* Anti-Auto-Clicker Warning */}
-      {isBlocked && (
-        <div className="bg-red-900/50 border border-red-500/50 p-4 rounded-lg mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-5 h-5 text-red-400" />
-            <span className="text-red-400 font-bold">Mining Blocked</span>
-          </div>
-          <p className="text-red-300 text-sm">
-            Too many clicks detected! Please wait {Math.ceil(blockTimeRemaining / 1000)} seconds before mining again.
-          </p>
-          <p className="text-gray-400 text-xs mt-1">
-            Anti-auto-clicker protection: Max 5 clicks per 10 seconds
-          </p>
-        </div>
-      )}
-
-      {/* Click Rate Warning */}
-      {clickCount >= 3 && !isBlocked && (
-        <div className="bg-yellow-900/50 border border-yellow-500/50 p-3 rounded-lg mb-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-yellow-400" />
-            <span className="text-yellow-400 text-sm font-semibold">
-              Slow down! ({clickCount}/{MAX_CLICKS_PER_WINDOW} clicks)
-            </span>
-          </div>
-          <p className="text-yellow-300 text-xs">
-            You'll be temporarily blocked if you click too fast
-          </p>
-        </div>
-      )}
-
       {/* Single Mining Node */}
       <div className="mb-4 sm:mb-6">
         <h3 className="text-white font-semibold mb-3 text-center text-sm sm:text-base">Mining Node</h3>
@@ -170,16 +80,14 @@ export const Mining: React.FC<MiningProps> = ({
           <div
             onClick={handleCellClick}
             className={`w-24 h-24 sm:w-32 sm:h-32 border-4 rounded-xl transition-all duration-200 relative overflow-hidden ${
-              isBlocked
-                ? 'border-red-500 bg-red-900/50 cursor-not-allowed opacity-50'
-                : gemNode
+              gemNode
                 ? gemNode.isShiny
                   ? 'border-yellow-400 bg-gradient-to-br from-yellow-900 to-orange-900 hover:from-yellow-800 hover:to-orange-800 shadow-lg shadow-yellow-500/50 animate-pulse cursor-pointer'
                   : 'border-purple-400 bg-gradient-to-br from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 shadow-lg shadow-purple-500/30 cursor-pointer'
                 : 'border-gray-600 bg-gray-800 hover:bg-gray-700 cursor-pointer'
             }`}
           >
-            {gemNode && !isBlocked && (
+            {gemNode && (
               <div className="absolute inset-0 flex items-center justify-center">
                 {gemNode.isShiny ? (
                   <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 text-yellow-400 animate-bounce" />
@@ -188,29 +96,17 @@ export const Mining: React.FC<MiningProps> = ({
                 )}
               </div>
             )}
-            {!gemNode && !isBlocked && (
+            {!gemNode && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="animate-spin w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full"></div>
-              </div>
-            )}
-            {isBlocked && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <AlertTriangle className="w-8 h-8 sm:w-12 sm:h-12 text-red-400" />
               </div>
             )}
           </div>
         </div>
         <div className="text-center text-gray-400 text-xs sm:text-sm mt-3 space-y-1">
           <p>💎 Purple gems = 1 gem | ✨ Golden gems = 1 shiny gem (5% chance)</p>
-          {!isBlocked ? (
-            <>
-              <p>Click to mine! New gems appear automatically.</p>
-              <p className="text-yellow-400">Rate limit: {clickCount}/{MAX_CLICKS_PER_WINDOW} clicks per 10 seconds</p>
-            </>
-          ) : (
-            <p className="text-red-400">Mining blocked for {Math.ceil(blockTimeRemaining / 1000)} seconds</p>
-          )}
-          {!gemNode && !isBlocked && <p className="text-yellow-400">Generating new gem node...</p>}
+          <p>Click to mine! New gems appear automatically.</p>
+          {!gemNode && <p className="text-yellow-400">Generating new gem node...</p>}
         </div>
       </div>
 
