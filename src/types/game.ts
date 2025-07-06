@@ -341,10 +341,12 @@ export interface AdventureSkill {
 export interface TriviaQuestion {
   id: string;
   question: string;
-  type: 'multiple-choice' | 'type-answer' | 'slider';
+  type: 'multiple-choice' | 'type-answer' | 'slider' | 'reorder-words';
   options?: string[];
-  correctAnswer: number | string;
+  correctAnswer: number | string | number[];
   category: string;
   difficulty: 'easy' | 'medium' | 'hard';
   sliderRange?: { min: number; max: number };
+  wordsToReorder?: string[];
+  hint?: string;
 }
