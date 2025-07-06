@@ -207,6 +207,111 @@ const useGameState = () => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Calculate total player stats including equipment and bonuses
+  const calculatePlayerStats = useCallback((state: GameState) => {
+    let totalAtk = state.playerStats.baseAtk;
+    let totalDef = state.playerStats.baseDef;
+    let totalHp = state.playerStats.baseHp;
+
+    // Add weapon attack
+    if (state.inventory.currentWeapon) {
+      const weaponAtk = state.inventory.currentWeapon.baseAtk + (state.inventory.currentWeapon.level - 1) * 10;
+      // Apply durability penalty (items lose effectiveness as durability decreases)
+      const durabilityMultiplier = state.inventory.currentWeapon.durability / state.inventory.currentWeapon.maxDurability;
+      totalAtk += Math.floor(weaponAtk * durabilityMultiplier);
+    }
+
+    // Add armor defense
+    if (state.inventory.currentArmor) {
+      const armorDef = state.inventory.currentArmor.baseDef + (state.inventory.currentArmor.level - 1) * 5;
+      // Apply durability penalty
+      const durabilityMultiplier = state.inventory.currentArmor.durability / state.inventory.currentArmor.maxDurability;
+      totalDef += Math.floor(armorDef * durabilityMultiplier);
+    }
+
+    // Add relic bonuses
+    state.inventory.equippedRelics.forEach(relic => {
+      if (relic.type === 'weapon' && relic.baseAtk) {
+        totalAtk += relic.baseAtk + (relic.level - 1) * 22;
+      } else if (relic.type === 'armor' && relic.baseDef) {
+        totalDef += relic.baseDef + (relic.level - 1) * 15;
+      }
+    });
+
+    // Add research bonuses
+    totalAtk += state.research.bonuses.atk;
+    totalDef += state.research.bonuses.def;
+    totalHp += state.research.bonuses.hp;
+
+    // Add garden bonuses
+    const gardenBonus = state.gardenOfGrowth.totalGrowthBonus / 100;
+    totalAtk = Math.floor(totalAtk * (1 + gardenBonus));
+    totalDef = Math.floor(totalDef * (1 + gardenBonus));
+    totalHp = Math.floor(totalHp * (1 + gardenBonus));
+
+    // Apply multipliers
+    totalAtk = Math.floor(totalAtk * state.multipliers.atk);
+    totalDef = Math.floor(totalDef * state.multipliers.def);
+    totalHp = Math.floor(totalHp * state.multipliers.hp);
+
+    return {
+      ...state.playerStats,
+      atk: totalAtk,
+      def: totalDef,
+      maxHp: totalHp,
+      hp: Math.min(state.playerStats.hp, totalHp) // Don't exceed new max HP
+    };
+  }, []);
+
+  // Reduce item durability during combat
+  const reduceDurability = useCallback((state: GameState, amount: number = 1): GameState => {
+    let newState = { ...state };
+
+    // Reduce weapon durability
+    if (newState.inventory.currentWeapon && newState.inventory.currentWeapon.durability > 0) {
+      const weaponIndex = newState.inventory.weapons.findIndex(w => w.id === newState.inventory.currentWeapon!.id);
+      if (weaponIndex !== -1) {
+        const updatedWeapons = [...newState.inventory.weapons];
+        updatedWeapons[weaponIndex] = {
+          ...updatedWeapons[weaponIndex],
+          durability: Math.max(0, updatedWeapons[weaponIndex].durability - amount)
+        };
+        
+        newState = {
+          ...newState,
+          inventory: {
+            ...newState.inventory,
+            weapons: updatedWeapons,
+            currentWeapon: updatedWeapons[weaponIndex]
+          }
+        };
+      }
+    }
+
+    // Reduce armor durability
+    if (newState.inventory.currentArmor && newState.inventory.currentArmor.durability > 0) {
+      const armorIndex = newState.inventory.armor.findIndex(a => a.id === newState.inventory.currentArmor!.id);
+      if (armorIndex !== -1) {
+        const updatedArmor = [...newState.inventory.armor];
+        updatedArmor[armorIndex] = {
+          ...updatedArmor[armorIndex],
+          durability: Math.max(0, updatedArmor[armorIndex].durability - amount)
+        };
+        
+        newState = {
+          ...newState,
+          inventory: {
+            ...newState.inventory,
+            armor: updatedArmor,
+            currentArmor: updatedArmor[armorIndex]
+          }
+        };
+      }
+    }
+
+    return newState;
+  }, []);
+
   // Load game state from storage
   useEffect(() => {
     const loadGameState = async () => {
@@ -230,7 +335,14 @@ const useGameState = () => {
               lastSaveTime: new Date(parsedState.offlineProgress?.lastSaveTime || Date.now())
             }
           };
-          setGameState(completeState);
+          
+          // Recalculate player stats with equipment
+          const stateWithStats = {
+            ...completeState,
+            playerStats: calculatePlayerStats(completeState)
+          };
+          
+          setGameState(stateWithStats);
         } else {
           setGameState(createInitialGameState());
         }
@@ -243,7 +355,7 @@ const useGameState = () => {
     };
 
     loadGameState();
-  }, []);
+  }, [calculatePlayerStats]);
 
   // Save game state to storage
   const saveGameState = useCallback(async (state: GameState) => {
@@ -264,9 +376,14 @@ const useGameState = () => {
   const updateGameState = useCallback((updater: (state: GameState) => GameState) => {
     setGameState(prevState => {
       if (!prevState) return null;
-      return updater(prevState);
+      const newState = updater(prevState);
+      // Recalculate player stats after any state change
+      return {
+        ...newState,
+        playerStats: calculatePlayerStats(newState)
+      };
     });
-  }, []);
+  }, [calculatePlayerStats]);
 
   // Equipment functions
   const equipWeapon = useCallback((weapon: Weapon) => {
@@ -291,7 +408,8 @@ const useGameState = () => {
 
   const upgradeWeapon = useCallback((weaponId: string) => {
     updateGameState(state => {
-      if (state.gems < 10) return state;
+      const weapon = state.inventory.weapons.find(w => w.id === weaponId);
+      if (!weapon || state.gems < weapon.upgradeCost) return state;
       
       const weaponIndex = state.inventory.weapons.findIndex(w => w.id === weaponId);
       if (weaponIndex === -1) return state;
@@ -303,12 +421,18 @@ const useGameState = () => {
         upgradeCost: Math.floor(updatedWeapons[weaponIndex].upgradeCost * 1.5)
       };
 
+      // Update current weapon if it's the one being upgraded
+      const newCurrentWeapon = state.inventory.currentWeapon?.id === weaponId 
+        ? updatedWeapons[weaponIndex] 
+        : state.inventory.currentWeapon;
+
       return {
         ...state,
-        gems: state.gems - 10,
+        gems: state.gems - weapon.upgradeCost,
         inventory: {
           ...state.inventory,
-          weapons: updatedWeapons
+          weapons: updatedWeapons,
+          currentWeapon: newCurrentWeapon
         }
       };
     });
@@ -316,7 +440,8 @@ const useGameState = () => {
 
   const upgradeArmor = useCallback((armorId: string) => {
     updateGameState(state => {
-      if (state.gems < 10) return state;
+      const armor = state.inventory.armor.find(a => a.id === armorId);
+      if (!armor || state.gems < armor.upgradeCost) return state;
       
       const armorIndex = state.inventory.armor.findIndex(a => a.id === armorId);
       if (armorIndex === -1) return state;
@@ -328,12 +453,18 @@ const useGameState = () => {
         upgradeCost: Math.floor(updatedArmor[armorIndex].upgradeCost * 1.5)
       };
 
+      // Update current armor if it's the one being upgraded
+      const newCurrentArmor = state.inventory.currentArmor?.id === armorId 
+        ? updatedArmor[armorIndex] 
+        : state.inventory.currentArmor;
+
       return {
         ...state,
-        gems: state.gems - 10,
+        gems: state.gems - armor.upgradeCost,
         inventory: {
           ...state.inventory,
-          armor: updatedArmor
+          armor: updatedArmor,
+          currentArmor: newCurrentArmor
         }
       };
     });
@@ -456,8 +587,12 @@ const useGameState = () => {
       let combatLog = [...state.combatLog];
 
       if (hit) {
-        // Player hits enemy
-        const damage = Math.max(1, state.playerStats.atk - enemy.def);
+        // Player hits enemy - reduce equipment durability
+        newState = reduceDurability(newState, 1);
+        
+        // Calculate damage with current stats (including equipment bonuses)
+        const playerStats = calculatePlayerStats(newState);
+        const damage = Math.max(1, playerStats.atk - enemy.def);
         enemy.hp = Math.max(0, enemy.hp - damage);
         combatLog.push(`You deal ${damage} damage to ${enemy.name}!`);
 
@@ -513,11 +648,13 @@ const useGameState = () => {
           combatLog.push(`You earned ${coinReward} coins and ${gemReward} gems!`);
         }
       } else {
-        // Player misses, enemy attacks
-        const damage = Math.max(1, enemy.atk - state.playerStats.def);
+        // Player misses, enemy attacks - reduce equipment durability from taking damage
+        newState = reduceDurability(newState, 2); // More durability loss when taking damage
+        
+        const damage = Math.max(1, enemy.atk - newState.playerStats.def);
         newState.playerStats = {
-          ...state.playerStats,
-          hp: Math.max(0, state.playerStats.hp - damage)
+          ...newState.playerStats,
+          hp: Math.max(0, newState.playerStats.hp - damage)
         };
         combatLog.push(`${enemy.name} deals ${damage} damage to you!`);
 
@@ -565,7 +702,7 @@ const useGameState = () => {
         combatLog
       };
     });
-  }, [gameState, updateGameState]);
+  }, [gameState, updateGameState, reduceDurability, calculatePlayerStats]);
 
   // Game management functions
   const resetGame = useCallback(() => {
@@ -878,13 +1015,24 @@ const useGameState = () => {
 
       if (state.gems < totalCost) return state;
 
+      // Update current weapon/armor if they were upgraded
+      const newCurrentWeapon = state.inventory.currentWeapon 
+        ? newWeapons.find(w => w.id === state.inventory.currentWeapon!.id) || state.inventory.currentWeapon
+        : null;
+      
+      const newCurrentArmor = state.inventory.currentArmor 
+        ? newArmor.find(a => a.id === state.inventory.currentArmor!.id) || state.inventory.currentArmor
+        : null;
+
       return {
         ...state,
         gems: state.gems - totalCost,
         inventory: {
           ...state.inventory,
           weapons: newWeapons,
-          armor: newArmor
+          armor: newArmor,
+          currentWeapon: newCurrentWeapon,
+          currentArmor: newCurrentArmor
         }
       };
     });
