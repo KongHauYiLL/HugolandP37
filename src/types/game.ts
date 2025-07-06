@@ -26,6 +26,8 @@ export interface GameState {
   hasUsedRevival: boolean;
   skills: SkillsSystem;
   adventureSkills: AdventureSkillsState;
+  research: ResearchSystem;
+  multipliers: Multipliers;
 }
 
 export interface PlayerStats {
@@ -349,4 +351,28 @@ export interface TriviaQuestion {
   sliderRange?: { min: number; max: number };
   wordsToReorder?: string[];
   hint?: string;
+}
+
+// Missing interfaces that were referenced but not defined
+export interface ResearchSystem {
+  level: number;
+  experience: number;
+  experienceToNext: number;
+  totalSpent: number;
+  bonuses: {
+    atk: number;
+    def: number;
+    hp: number;
+    coinMultiplier: number;
+    gemMultiplier: number;
+    xpMultiplier: number;
+  };
+}
+
+export interface Multipliers {
+  coins: number;
+  gems: number;
+  atk: number;
+  def: number;
+  hp: number;
 }

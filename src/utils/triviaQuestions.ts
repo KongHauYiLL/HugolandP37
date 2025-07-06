@@ -1,12 +1,14 @@
 export interface TriviaQuestion {
   id: string;
   question: string;
-  type: 'multiple-choice' | 'type-answer' | 'slider';
+  type: 'multiple-choice' | 'type-answer' | 'slider' | 'reorder-words';
   options?: string[];
-  correctAnswer: number | string;
+  correctAnswer: number | string | number[];
   category: string;
   difficulty: 'easy' | 'medium' | 'hard';
   sliderRange?: { min: number; max: number };
+  wordsToReorder?: string[];
+  hint?: string;
 }
 
 export const triviaQuestions: TriviaQuestion[] = [
@@ -147,6 +149,48 @@ export const triviaQuestions: TriviaQuestion[] = [
     correctAnswer: 'antarctica',
     category: 'Geography',
     difficulty: 'easy'
+  },
+
+  // Reorder Words Questions
+  {
+    id: '16',
+    question: 'Put these words in the correct order to form a sentence:',
+    type: 'reorder-words',
+    wordsToReorder: ['The', 'cat', 'is', 'sleeping'],
+    correctAnswer: [0, 1, 2, 3],
+    category: 'Language',
+    difficulty: 'easy',
+    hint: 'Think about how you would normally say this sentence'
+  },
+  {
+    id: '17',
+    question: 'Order these numbers from smallest to largest:',
+    type: 'reorder-words',
+    wordsToReorder: ['10', '5', '2', '7'],
+    correctAnswer: [2, 1, 3, 0],
+    category: 'Math',
+    difficulty: 'easy',
+    hint: 'Start with the smallest number'
+  },
+  {
+    id: '18',
+    question: 'Put these colors in rainbow order:',
+    type: 'reorder-words',
+    wordsToReorder: ['Green', 'Red', 'Blue', 'Yellow'],
+    correctAnswer: [1, 3, 0, 2],
+    category: 'Art',
+    difficulty: 'medium',
+    hint: 'Remember ROY G. BIV'
+  },
+  {
+    id: '19',
+    question: 'Order these days of the week:',
+    type: 'reorder-words',
+    wordsToReorder: ['Wednesday', 'Monday', 'Friday', 'Tuesday'],
+    correctAnswer: [1, 3, 0, 2],
+    category: 'Time',
+    difficulty: 'easy',
+    hint: 'Start with the first day of the week'
   },
 
   // Basic Colors & Art - Easy
@@ -688,7 +732,7 @@ export const getQuestionByZone = (zone: number): TriviaQuestion => {
   }
 };
 
-export const checkAnswer = (question: TriviaQuestion, userAnswer: string | number): boolean => {
+export const checkAnswer = (question: TriviaQuestion, userAnswer: string | number | number[]): boolean => {
   if (question.type === 'multiple-choice') {
     return userAnswer === question.correctAnswer;
   } else if (question.type === 'slider') {
@@ -697,6 +741,12 @@ export const checkAnswer = (question: TriviaQuestion, userAnswer: string | numbe
     const correctNum = Number(question.correctAnswer);
     const userNum = Number(userAnswer);
     return Math.abs(userNum - correctNum) <= tolerance;
+  } else if (question.type === 'reorder-words') {
+    // For reorder questions, compare arrays
+    if (!Array.isArray(userAnswer) || !Array.isArray(question.correctAnswer)) {
+      return false;
+    }
+    return JSON.stringify(userAnswer) === JSON.stringify(question.correctAnswer);
   } else {
     // Type answer - normalize both strings for comparison
     const normalizedUserAnswer = String(userAnswer).toLowerCase().trim();
