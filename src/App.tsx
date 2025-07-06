@@ -1,5 +1,5 @@
 import React, { useState, Suspense, useEffect } from 'react';
-import { useGameState } from './hooks/useGameState';
+import useGameState from './hooks/useGameState';
 import { Combat } from './components/Combat';
 import { Shop } from './components/Shop';
 import { Inventory } from './components/Inventory';
